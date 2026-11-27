@@ -1,6 +1,8 @@
 # Gradescope Student Data Exporter
 
-Downloads your submitted PDFs (with inline grader feedback) and a grades CSV for every Gradescope course you're enrolled in.
+Just graduated?  This tool exports your Gradescope assignments.
+
+It downloads your submitted PDFs (with inline grader feedback) and a grades CSV for every Gradescope course you're enrolled in.
 
 Works with SSO logins (Microsoft, Google, etc.) via browser cookies.
 
