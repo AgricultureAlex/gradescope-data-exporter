@@ -1,5 +1,8 @@
 # IDE
 .idea/
 
+# Virtual environment
+.venv/
+
 # Secrets / credentials
 *cookies*
