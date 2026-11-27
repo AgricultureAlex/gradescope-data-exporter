@@ -82,31 +82,19 @@ def get_courses(session: requests.Session, verbose: bool) -> list[dict]:
     courses = []
     seen = set()
 
-    # Try the React props blob first (most reliable across Gradescope versions)
-    nav = soup.select_one("[data-react-class='FullNavigation']")
-    if nav:
-        props_str = nav.get("data-react-props", "")
-        # Extract courses from JSON blob — look for id/name pairs near "courses"
-        for m in re.finditer(r'"id"\s*:\s*(\d+).*?"name"\s*:\s*"([^"]+)"', props_str):
-            cid, name = m.group(1), m.group(2)
-            if cid not in seen:
-                seen.add(cid)
-                courses.append({"id": cid, "name": name, "role": "student"})
-
-    # Fallback: scrape course box links from the dashboard HTML
-    if not courses:
-        for a in soup.select("a[href^='/courses/']"):
-            m = re.match(r"/courses/(\d+)$", a.get("href", ""))
-            if not m:
-                continue
-            cid = m.group(1)
-            if cid in seen:
-                continue
-            seen.add(cid)
-            name = (a.get_text(strip=True) or
-                    a.get("aria-label", "") or
-                    cid)
-            courses.append({"id": cid, "name": name, "role": "student"})
+    for a in soup.select("a.courseBox[href^='/courses/']"):
+        m = re.match(r"/courses/(\d+)$", a.get("href", ""))
+        if not m or m.group(1) in seen:
+            continue
+        cid = m.group(1)
+        seen.add(cid)
+        short_el = a.select_one(".courseBox--shortname")
+        name_el = a.select_one(".courseBox--name")
+        short = short_el.get_text(strip=True) if short_el else ""
+        name = name_el.get_text(strip=True) if name_el else ""
+        if not name.startswith(short):
+            name = f"{short} {name}".strip()
+        courses.append({"id": cid, "name": name or cid, "role": "student"})
 
     if verbose:
         print(f"  Found {len(courses)} course(s)")
@@ -122,27 +110,20 @@ def get_assignments(session: requests.Session, course_id: str, verbose: bool) ->
     Return list of dicts:
       id, name, score, max_score, submission_id (may be None if not submitted/returned)
     """
-    url = f"{BASE_URL}/courses/{course_id}/assignments"
+    url = f"{BASE_URL}/courses/{course_id}"
     resp = session.get(url)
     if resp.status_code == 403:
         if verbose:
-            print("    Skipping — no access to assignment list (course may be concluded)")
+            print("    Skipping — no access to course (may be concluded)")
         return []
     soup = BeautifulSoup(resp.text, "html.parser")
     assignments = []
-    seen_ids = set()
 
-    for row in soup.select("tr[data-assignment-id]"):
-        aid = row.get("data-assignment-id", "").strip()
-        if not aid or aid in seen_ids:
+    for row in soup.select("tbody tr"):
+        name_el = row.select_one("th.table--primaryLink")
+        if not name_el:
             continue
-        seen_ids.add(aid)
-
-        # Name
-        name_el = (row.select_one(".js-assignmentTableAssignmentName") or
-                   row.select_one("td.submissionStatus--assignmentName") or
-                   row.select_one("td:first-child"))
-        name = name_el.get_text(strip=True) if name_el else aid
+        name = name_el.get_text(strip=True)
 
         # Score
         score, max_score = "", ""
@@ -155,13 +136,13 @@ def get_assignments(session: requests.Session, course_id: str, verbose: bool) ->
             else:
                 score = raw
 
-        # Submission link → submission ID
-        sub_id = None
-        for a in row.select("a[href*='/submissions/']"):
-            m = re.search(r"/submissions/(\d+)", a["href"])
+        # Submission link → assignment and submission IDs (absent if not submitted)
+        aid, sub_id = None, None
+        link = name_el.select_one("a[href*='/submissions/']")
+        if link:
+            m = re.search(r"/assignments/(\d+)/submissions/(\d+)", link["href"])
             if m:
-                sub_id = m.group(1)
-                break
+                aid, sub_id = m.groups()
 
         assignments.append({
             "id": aid,

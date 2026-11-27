@@ -1,6 +1,9 @@
 # IDE
 .idea/
 
+# Exported grades and submissions
+output/
+
 # Virtual environment
 .venv/
 
