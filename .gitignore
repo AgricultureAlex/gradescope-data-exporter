@@ -4,6 +4,9 @@
 # Exported grades and submissions
 output/
 
+# macOS
+.DS_Store
+
 # Virtual environment
 .venv/
 
