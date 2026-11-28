@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Exporter for Gradescope",
+  "version": "0.1.0",
+  "description": "Export your own Gradescope submissions and grades. Not affiliated with Gradescope.",
+  "host_permissions": ["https://www.gradescope.com/*"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

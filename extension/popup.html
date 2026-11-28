@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Exporter for Gradescope</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { width: 340px; margin: 0; padding: 12px 16px; font: 13px system-ui, sans-serif; }
+    h1 { font-size: 15px; margin: 0 0 8px; }
+    ul { padding-left: 18px; max-height: 360px; overflow-y: auto; }
+    li { margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Exporter for Gradescope</h1>
+  <p id="status">Loading courses…</p>
+  <a id="login" href="https://www.gradescope.com/login" target="_blank" hidden>Log in to Gradescope</a>
+  <ul id="courses"></ul>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
