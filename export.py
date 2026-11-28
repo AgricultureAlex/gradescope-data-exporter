@@ -213,7 +213,7 @@ def run_log(output_dir: Path):
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
     # "x" mode fails rather than overwrite an earlier run's log
-    with open(output_dir / f"export-log_{stamp}.txt", "x", encoding="utf-8") as log:
+    with open(output_dir / f"export-log_{stamp}.txt", "x", buffering=1, encoding="utf-8") as log:
         with contextlib.redirect_stdout(Tee(sys.stdout, log)), \
              contextlib.redirect_stderr(Tee(sys.stderr, log)):
             print(f"Log file: {log.name}")
