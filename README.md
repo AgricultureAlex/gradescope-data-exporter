@@ -33,12 +33,17 @@ Add `-v` for verbose output.
 output/
   export-log_<timestamp>.txt    ← console output of one run (a new file each time)
   Course Name/
-    Assignment 1.pdf    ← your submission with grader annotations
+    Assignment 1.pdf                  ← graded PDF of your submission
+    Assignment 1 (original).pdf       ← the file you uploaded
+    Assignment 1 (code).zip           ← code submissions
+    Assignment 1 (template).pdf       ← blank assignment, if Gradescope provides it
+    Assignment 1 (details).md         ← questions, online answers, rubric, comments, autograder results
+    Assignment 1 (linked files)/      ← Gradescope-hosted files referenced in those details
     Assignment 2.pdf
     grades.csv          ← all assignment scores for the course
 ```
 
-PDFs are skipped (noted in output) when the submission was a text entry or online quiz — Gradescope doesn't expose those as downloadable PDFs for students.
+Each item is saved only when Gradescope offers it. Files that already exist are not downloaded or overwritten, so delete a file to fetch it again (`grades.csv` is rewritten on every run). External links are listed in the details file but not downloaded. Assignments with no submission appear only in `grades.csv`.
 
 ## Config
 

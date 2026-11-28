@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Gradescope Student Data Exporter
-Downloads your submitted PDFs (with inline feedback) and a grades CSV for
-every course where you are a student.
+Downloads your submitted PDFs, original uploads, code ZIPs, templates, grading
+details and a grades CSV for every course where you are a student.
 
 Requires a Netscape-format cookies.txt file — see credentials.yaml for how
 to export one from Chrome after logging in via SSO.
@@ -26,6 +26,8 @@ from pathlib import Path
 import requests
 import yaml
 from bs4 import BeautifulSoup
+
+import extras
 
 BASE_URL = "https://www.gradescope.com"
 REQUEST_DELAY = 0.5  # seconds between requests, to be polite
@@ -189,6 +191,56 @@ def download_pdf(session: requests.Session,
     return True
 
 
+def export_extras(session: requests.Session,
+                  url: str,
+                  course_dir: Path,
+                  aname: str,
+                  verbose: bool) -> tuple[int, int]:
+    """Save whatever else the submission page offers. Return (saved, failed)."""
+    data = extras.get_viewer_data(session, url)
+    if data is None:
+        print(f"      FAILED: could not read the submission page for {aname}")
+        return 0, 1
+
+    saved = failed = 0
+
+    def report(label: str, result: str) -> None:
+        nonlocal saved, failed
+        if result == "saved":
+            saved += 1
+            print(f"      + {label}")
+        elif result == "failed":
+            failed += 1
+            print(f"      FAILED: {label}")
+        elif verbose:
+            print(f"      Already exists, skipping: {label}")
+
+    for filename, file_url in extras.attached_files(data, BASE_URL, aname):
+        path = course_dir / filename
+        if path.exists():
+            report(filename, "exists")
+            continue
+        time.sleep(REQUEST_DELAY)
+        report(filename, "saved" if extras.download_file(session, file_url, path) else "failed")
+
+    text, links = extras.render_details(data, aname)
+    details = course_dir / f"{aname} (details).md"
+    if details.exists():
+        report(details.name, "exists")
+    else:
+        details.write_text(text, encoding="utf-8")
+        report(details.name, "saved")
+
+    folder = course_dir / f"{aname} (linked files)"
+    for link in links:
+        full_url = link if link.startswith("http") else BASE_URL + link
+        time.sleep(REQUEST_DELAY)
+        result = extras.download_linked_file(session, full_url, folder)
+        report(f"{folder.name}/{link.rsplit('/', 1)[-1]}", result)
+
+    return saved, failed
+
+
 # ---------------------------------------------------------------------------
 # Run log
 # ---------------------------------------------------------------------------
@@ -253,6 +305,8 @@ def export_course(session: requests.Session,
     grades_rows = []
     downloaded = 0
     skipped = 0
+    extra_saved = 0
+    extra_failed = 0
 
     for asgn in assignments:
         aname = safe_name(asgn["name"])
@@ -276,20 +330,24 @@ def export_course(session: requests.Session,
             skipped += 1
             continue
 
-        pdf_url = f"{BASE_URL}/courses/{cid}/assignments/{asgn['id']}/submissions/{sub_id}.pdf"
+        submission_url = f"{BASE_URL}/courses/{cid}/assignments/{asgn['id']}/submissions/{sub_id}"
         out_path = course_dir / f"{aname}.pdf"
 
-        time.sleep(REQUEST_DELAY)
-        ok = download_pdf(session, pdf_url, out_path, verbose)
+        if not out_path.exists():
+            time.sleep(REQUEST_DELAY)
+        ok = download_pdf(session, submission_url + ".pdf", out_path, verbose)
         if ok:
             label = grade_str or "downloaded"
             print(f"    {out_path.name}: {label}")
             downloaded += 1
         else:
-            # Some assignments return HTML, not PDF (online quizzes, text submissions)
-            if verbose:
-                print(f"    {aname}: submission exists but PDF not available (online/text submission)")
+            print(f"    {aname}: no graded PDF")
             skipped += 1
+
+        time.sleep(REQUEST_DELAY)
+        saved, failed = export_extras(session, submission_url, course_dir, aname, verbose)
+        extra_saved += saved
+        extra_failed += failed
 
     # Write grades CSV
     if grades_rows:
@@ -299,7 +357,8 @@ def export_course(session: requests.Session,
             writer.writeheader()
             writer.writerows(grades_rows)
 
-    print(f"  → {downloaded} PDF(s) saved, {skipped} skipped, grades.csv written")
+    print(f"  → {downloaded} graded PDF(s) present, {skipped} without, "
+          f"{extra_saved} new extra file(s), {extra_failed} failure(s), grades.csv written")
 
 
 # ---------------------------------------------------------------------------
