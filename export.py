@@ -12,12 +12,15 @@ Usage:
 """
 
 import argparse
+import contextlib
 import csv
 import http.cookiejar
 import os
 import re
 import sys
 import time
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -187,6 +190,48 @@ def download_pdf(session: requests.Session,
 
 
 # ---------------------------------------------------------------------------
+# Run log
+# ---------------------------------------------------------------------------
+
+class Tee:
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data: str) -> int:
+        for stream in self.streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for stream in self.streams:
+            stream.flush()
+
+
+@contextlib.contextmanager
+def run_log(output_dir: Path):
+    """Copy everything printed during this run to a new timestamped file."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+    # "x" mode fails rather than overwrite an earlier run's log
+    with open(output_dir / f"export-log_{stamp}.txt", "x", encoding="utf-8") as log:
+        with contextlib.redirect_stdout(Tee(sys.stdout, log)), \
+             contextlib.redirect_stderr(Tee(sys.stderr, log)):
+            print(f"Log file: {log.name}")
+            try:
+                yield
+            # These are printed after the log closes, so record them here
+            except SystemExit as e:
+                log.write(f"{e}\n")
+                raise
+            except KeyboardInterrupt:
+                log.write("Interrupted\n")
+                raise
+            except Exception:
+                log.write(traceback.format_exc())
+                raise
+
+
+# ---------------------------------------------------------------------------
 # Main export logic
 # ---------------------------------------------------------------------------
 
@@ -238,7 +283,7 @@ def export_course(session: requests.Session,
         ok = download_pdf(session, pdf_url, out_path, verbose)
         if ok:
             label = grade_str or "downloaded"
-            print(f"    {aname}: {label}")
+            print(f"    {out_path.name}: {label}")
             downloaded += 1
         else:
             # Some assignments return HTML, not PDF (online quizzes, text submissions)
@@ -280,6 +325,11 @@ def main() -> None:
     output_dir = Path(config.get("OUTPUT_DIR", "./output"))
     skip_ids = set(str(x).strip() for x in (config.get("COURSES_TO_SKIP") or []))
 
+    with run_log(output_dir):
+        run_export(cookies_path, output_dir, skip_ids, args.verbose)
+
+
+def run_export(cookies_path: str, output_dir: Path, skip_ids: set, verbose: bool) -> None:
     print("Welcome to the Gradescope Student Data Exporter\n")
 
     # Auth
@@ -293,11 +343,10 @@ def main() -> None:
         )
     print(f"Authenticated as: {username}")
     print(f"Output directory: {output_dir}\n")
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Courses
     print("Getting list of courses…")
-    courses = get_courses(session, args.verbose)
+    courses = get_courses(session, verbose)
     if not courses:
         sys.exit("No courses found. Try logging in again and re-exporting cookies.")
 
@@ -308,7 +357,7 @@ def main() -> None:
             continue
         print(f"\n[{i}/{total}] {course['name']}  (id: {course['id']})")
         time.sleep(REQUEST_DELAY)
-        export_course(session, course, output_dir, args.verbose)
+        export_course(session, course, output_dir, verbose)
 
     print("\nDone.")
 

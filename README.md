@@ -31,6 +31,7 @@ Add `-v` for verbose output.
 
 ```
 output/
+  export-log_<timestamp>.txt    ← console output of one run (a new file each time)
   Course Name/
     Assignment 1.pdf    ← your submission with grader annotations
     Assignment 2.pdf
